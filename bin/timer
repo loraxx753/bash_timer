@@ -1,0 +1,111 @@
+#!/bin/bash
+
+# SOURCE=$(dirname ${BASH_SOURCE[0]})
+SOURCE=$(echo `pwd`)
+CONFIG="${SOURCE}/../config"
+
+declare -a keys
+
+keyFile="$SOURCE/../config/keys.cfg"
+
+purple="\033[35m"
+normal="\033[0m\033[39m"
+blue="\033[34m"
+yellow="\033[33m"
+red="\033[31m"
+bold="\033[1m"
+grey_bk="\033[47m"
+start= 
+duration= 
+total= 
+linestart=
+lineend=
+line_number=
+
+tick() {
+    line=`sed -n "/^$key:.*/p" $keyFile`
+    IFS=':' read -r key start_time current_time first_line current_line <<< "$line"
+
+    now=$(date +%s)
+
+    # Figure out the difference
+    time_between=$((now - current_time))
+    time_total=$((now - start_time))
+    
+    # Format the difference
+    between_formatted=$(format_timestamp ${time_between})
+    # Fomat the current
+    current_formatted=$(format_timestamp $time_total)
+    echo -e -n "${grey_bk}";
+    if [[ $key != 'default' ]]; then
+        echo -e -n "${bold}[$key]${normal}${grey_bk} "         
+    fi 
+    echo -e -n "${grey_bk}Lines ${bold}$current_line-$line_number${normal}${grey_bk} : ${blue}${bold}$between_formatted${normal}${grey_bk}${blue} duration.${normal}${grey_bk} Start line ${bold}$first_line-$line_number${normal}${grey_bk} : ${red}${bold}$current_formatted${normal}${grey_bk}${red} total"
+    
+    echo -e -n "${normal}\n"
+    # Change the variables
+    # 
+    update_key $start_time $now $first_line $line_number
+}
+
+start() {
+    echo -e -n "${purple}Build timer started at $(date +%Y-%m-%d:%H:%M:%S)"
+    if [[ $key != 'default' ]]; then
+        echo -e -n " for ${bold}$key"         
+    fi 
+    echo -e -n "${normal}\n"
+    start_time=$(date +%s)
+    current_time=$start_time
+    first_line=$line_number
+    current_line=$line_number
+
+    update_key $start_time $current_time $first_line $current_line
+}
+
+update_key() {
+    line=`sed -n /^$key/= $keyFile`
+    sed -i '' "${line}s/.*/$key:$1:$2:$3:$4/" ${keyFile}
+}
+
+format_timestamp() {
+    if [ $1 -gt 3600 ]; then
+        timeformat="+%H hours %M minutes %S seconds"
+    elif [ $1 -gt 60 ]; then
+        timeformat="+%M minutes %S seconds"
+    else
+        timeformat="+%S seconds"
+    fi 
+
+    echo `date --date="@$1" "$timeformat" 2>/dev/null || date -r $1 "$timeformat" 2>/dev/null`
+}
+
+check_for_restart() {
+    line=`sed -n "/^$key:.*/p" $keyFile`
+    IFS=':' read -r key start_time current_time first_line current_line <<< "$line"
+    if [[ $first_line == $line_number ]] || [[ $first_line > $line_number ]]; then
+        start
+    else
+        tick
+    fi 
+}
+
+init() {
+    if [ `sed -n /^$key/= $keyFile` ]; then
+        check_for_restart
+    else
+        echo "${key}:" >> $keyFile
+        start
+    fi
+}
+
+timer() {
+    line_number=${BASH_LINENO[0]}
+
+    if [[ $1 != 'end' ]]; then 
+        key=${1:-default}
+        init
+    else
+        key=${2:-default}
+        end
+    fi    
+}
