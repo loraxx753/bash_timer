@@ -1,0 +1,98 @@
+#!/bin/bash
+
+_tick() {
+    local purple="\033[35m"
+    local normal="\033[0m\033[39m"
+    local blue="\033[34m"
+    local yellow="\033[33m"
+    local red="\033[31m"
+    local bold="\033[1m"
+    local grey_bk="\033[47m"
+
+    local line=`sed -n "/^$1:.*/p" $shtimer_keyFile`
+    IFS=':' read -r key start_time current_time first_line current_line <<< "$line"
+
+    local now=$(date +%s)
+
+    # Figure out the difference
+    local time_between=$((now - current_time))
+    local time_total=$((now - start_time))
+    
+    # Format the difference
+    between_formatted=$(_shtimer_format_timestamp ${time_between})
+    # Fomat the current
+    current_formatted=$(_shtimer_format_timestamp $time_total)
+    echo -e -n "${grey_bk}";
+    if [[ $1 != 'default' ]]; then
+        echo -e -n "${bold}[$1]${normal}${grey_bk} "         
+    fi 
+    echo -e -n "${grey_bk}Lines ${bold}$current_line-$2${normal}${grey_bk} : ${blue}${bold}$between_formatted${normal}${grey_bk}${blue} duration.${normal}${grey_bk} Start line ${bold}$first_line-$2${normal}${grey_bk} : ${red}${bold}$current_formatted${normal}${grey_bk}${red} total"
+    
+    echo -e -n "${normal}\n"
+    # Change the variables
+    # 
+    _update_key $1 $start_time $now $first_line $2
+}
+
+_shtimer_start() {
+    local purple="\033[35m"
+    local normal="\033[0m\033[39m"
+    local bold="\033[1m"
+
+    echo -e -n "${purple}Build timer started at $(date +%Y-%m-%d:%H:%M:%S)"
+    if [[ $1 != 'default' ]]; then
+        echo -e -n " for ${bold}$1"         
+    fi 
+    echo -e -n "${normal}\n"
+    start_time=$(date +%s)
+    current_time=$start_time
+    first_line=$2
+    current_line=$2
+
+    _update_key $1 $start_time $current_time $first_line $current_line
+}
+
+_update_key() {
+    local line=`sed -n /^$1/= $shtimer_keyFile`
+    sed -i '' "${line}s/.*/$1:$2:$3:$4:$5/" ${shtimer_keyFile}
+}
+
+_shtimer_format_timestamp() {
+    if [ $1 -gt 3600 ]; then
+        timeformat="+%H hours %M minutes %S seconds"
+    elif [ $1 -gt 60 ]; then
+        timeformat="+%M minutes %S seconds"
+    else
+        timeformat="+%S seconds"
+    fi 
+
+    echo `date --date="@$1" "$timeformat" 2>/dev/null || date -r $1 "$timeformat" 2>/dev/null`
+}
+
+_shtimer_check_for_restart() {
+    line=`sed -n "/^$1:.*/p" $shtimer_keyFile`
+    IFS=':' read -r key start_time current_time first_line current_line <<< "$line"
+    if [ $current_line -gt $2 ]; then
+        _shtimer_start $1 $2
+    else
+        _tick $1 $2
+    fi 
+}
+
+_shtimer_init() {
+    if [ `sed -n /^$1/= $shtimer_keyFile` ]; then
+        _shtimer_check_for_restart $1 $2
+    else
+        echo "${1}:" >> $shtimer_keyFile
+        _shtimer_start $1 $2
+    fi
+}
+
+shtimer() {
+    local sourcepath=$(dirname ${BASH_SOURCE[0]})
+
+    shtimer_keyFile="$sourcepath/../config/keys.cfg"
+    shtimer_version="$sourcepath/../config/version.cfg"
+
+    _shtimer_init ${1:-default} ${BASH_LINENO[0]}
+}
