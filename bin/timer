@@ -81,7 +81,7 @@ format_timestamp() {
 check_for_restart() {
     line=`sed -n "/^$key:.*/p" $keyFile`
     IFS=':' read -r key start_time current_time first_line current_line <<< "$line"
-    if [[ $first_line == $line_number ]] || [[ $first_line > $line_number ]]; then
+    if [ $current_line -gt $line_number ]; then
         start
     else
         tick
